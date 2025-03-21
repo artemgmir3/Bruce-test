@@ -3198,7 +3198,7 @@ void TFT_eSPI::drawChar(int32_t x, int32_t y, uint16_t c, uint32_t color, uint32
      ((yd + 8 * size - 1) < _vpY))    // Clip top
     return;
 
-  if (c > 255) return;
+  ////if (c > 255) return;
   if (!_cp437 && c > 175) c++;
 
   bool fillbg = (bg != color);
