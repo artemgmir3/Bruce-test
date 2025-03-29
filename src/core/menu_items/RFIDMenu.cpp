@@ -20,8 +20,8 @@ void RFIDMenu::optionsMenu() {
         {"Chameleon",   [=]()  { Chameleon(); }},
         {"PN532 BLE",   [=]()  { Pn532ble(); }},
         {"Config",      [=]()  { configMenu(); }},
-        {"Main Menu",   [=]()  { backToMenu(); }},
     };
+    addOptionToMainMenu();
 
     delay(200);
 
@@ -29,25 +29,20 @@ void RFIDMenu::optionsMenu() {
     if(bruceConfig.rfidModule==M5_RFID2_MODULE)        txt+=" (RFID2)";
     else if(bruceConfig.rfidModule==PN532_I2C_MODULE)  txt+=" (PN532-I2C)";
     else if(bruceConfig.rfidModule==PN532_SPI_MODULE)  txt+=" (PN532-SPI)";
-    loopOptions(options,false,true,txt.c_str());
+    loopOptions(options,true,txt.c_str());
 }
 
 void RFIDMenu::configMenu() {
     options = {
-        {"RFID Module",   [=]() { setRFIDModuleMenu(); }},
-        {"Add MIF Key",   [=]() { addMifareKeyMenu(); }},
+        {"RFID Module",   setRFIDModuleMenu},
+        {"Add MIF Key",   addMifareKeyMenu},
         {"Back",          [=]() { optionsMenu(); }},
     };
 
-    loopOptions(options,false,true,"RFID Config");
+    loopOptions(options,true,"RFID Config");
 }
 void RFIDMenu::drawIconImg() {
-    if(bruceConfig.theme.rfid) {
-        FS* fs = nullptr;
-        if(bruceConfig.theme.fs == 1) fs=&LittleFS;
-        else if (bruceConfig.theme.fs == 2) fs=&SD;
-        drawImg(*fs, bruceConfig.getThemeItemImg(bruceConfig.theme.paths.rfid), 0, imgCenterY, true);
-    }
+    drawImg(*bruceConfig.themeFS(), bruceConfig.getThemeItemImg(bruceConfig.theme.paths.rfid), 0, imgCenterY, true);
 }
 void RFIDMenu::drawIcon(float scale) {
     clearIconArea();

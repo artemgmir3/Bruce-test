@@ -78,12 +78,18 @@ extern bool BLEConnected;  // inform if BLE is active or not
 extern bool gpsConnected; // inform if GPS is active or not
 
 struct Option {
-  std::string label;
+  String label;
   std::function<void()> operation;
   bool selected = false;
+  bool ( *hover )(void *hoverPointer, bool shouldRender);
+  void *hoverPointer;
 
-  Option(const std::string& lbl, const std::function<void()>& op, bool sel = false)
-    : label(lbl), operation(op), selected(sel) {}
+  Option(String lbl,
+         const std::function<void()>& op,
+         bool sel = false,
+         bool ( *hov )(void *hoverPointer, bool shouldRender) = nullptr, // hover lambda returns true if it already handled rendering
+         void *ptr = nullptr)
+    : label(lbl), operation(op), selected(sel), hover(hov), hoverPointer(ptr) {}
 };
 
 struct keyStroke { // DO NOT CHANGE IT!!!!!
@@ -134,6 +140,11 @@ struct TouchPoint {
 extern TouchPoint touchPoint;
 extern keyStroke KeyStroke;
 extern std::vector<Option> options;
+
+template<typename R, typename... Args>
+std::function<void()> lambdaHelper(R (*callback)(Args...), Args... args) {
+  return [=]() { (void)callback(args...); };
+}
 
 extern String fileToCopy;
 

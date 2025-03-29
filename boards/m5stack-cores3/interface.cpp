@@ -1,7 +1,6 @@
 #include "interface.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
-
 #include <M5Unified.h>
 
 /***************************************************************************************
@@ -19,7 +18,7 @@ void _setup_gpio() {
 ** location: display.cpp
 ** Description:   Delivers the battery value from 1-100
 ***************************************************************************************/
-int getBattery() { 
+int getBattery() {
   int percent;
   percent = M5.Power.getBatteryLevel();
   return  (percent < 0) ? 0
@@ -33,7 +32,7 @@ int getBattery() {
 ** location: settings.cpp
 ** set brightness value
 **********************************************************************/
-void _setBrightness(uint8_t brightval) { 
+void _setBrightness(uint8_t brightval) {
   M5.Display.setBrightness(brightval);
 }
 
@@ -88,7 +87,8 @@ void InputHandler(void) {
 ** location: mykeyboard.cpp
 ** Turns off the device (or try to)
 **********************************************************************/
-void powerOff() { }
+void powerOff() { M5.Power.powerOff(); }
+void goToDeepSleep() { M5.Power.deepSleep(); }
 
 
 /*********************************************************************
@@ -97,3 +97,13 @@ void powerOff() { }
 ** Btn logic to tornoff the device (name is odd btw)
 **********************************************************************/
 void checkReboot() { }
+
+/***************************************************************************************
+** Function name: isCharging()
+** Description:   Determines if the device is charging
+***************************************************************************************/
+bool isCharging() {
+    if(M5.Power.getBatteryCurrent()>0 || M5.Power.getBatteryCurrent())
+        return true;
+    else return false;
+}

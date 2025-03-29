@@ -1,13 +1,17 @@
 #include "display.h"
 #include "utils.h"
 #include "mykeyboard.h"
+#include "interface.h" //for charging ischarging to print charging indicator
 #include "wg.h" //for isConnectedWireguard to print wireguard lock
 #include "settings.h" //for timeStr
 #include "modules/others/webInterface.h" // for server
 #include <JPEGDecoder.h>
 
+
 #define MAX_MENU_SIZE (int)(tftHeight/25)
 
+
+bool __attribute__((weak)) isCharging() { return false; }
 /***************************************************************************************
 ** Function name: displayScrollingText
 ** Description:   Scroll large texts into screen
@@ -411,7 +415,7 @@ void padprintln(double n, int digits, int16_t padx) {
 **  Function: loopOptions
 **  Where you choose among the options in menu
 **********************************************************************/
-int loopOptions(std::vector<Option>& options, bool bright, bool submenu, const char *subText, int index){
+int loopOptions(std::vector<Option>& options, bool submenu, const char *subText, int index){
   Opt_Coord coord;
   bool redraw = true;
   int menuSize = options.size();
@@ -420,22 +424,29 @@ int loopOptions(std::vector<Option>& options, bool bright, bool submenu, const c
     }
   if(index>0) tft.fillRoundRect(tftWidth*0.10,tftHeight/2-menuSize*(FM*8+4)/2 -5,tftWidth*0.8,(FM*8+4)*menuSize+10,5,bruceConfig.bgColor);
   if(index>=options.size()) index=0;
-  bool first=true;
+  bool firstRender = true;
   drawMainBorder();
   while(1){
     if (redraw) {
-      if(submenu) drawSubmenu(index, options, subText);
-      else coord=drawOptions(index, options, bruceConfig.priColor, bruceConfig.bgColor);
-      if(bright){
-        uint8_t bv = String(options[index].label.c_str()).toInt();  // Grabs the int value from menu option
-        if(bv>0) setBrightness(bv,false);                           // If valid, apply brightnes
-        else setBrightness(bruceConfig.bright,false);               // if "Main Menu", bv==0, return brightness to default
+      bool renderedByLambda = false;
+      if (options[index].hover) renderedByLambda = options[index].hover(options[index].hoverPointer, true);
+
+      if (!renderedByLambda) {
+        if (submenu) drawSubmenu(index, options, subText);
+        else coord = drawOptions(index, options, bruceConfig.priColor, bruceConfig.bgColor, firstRender);
       }
-      redraw=false;
-      if(first) while(SelPress) delay(100); // to avoid miss click due to heavy fingers
+      firstRender = false;
+      redraw = false;
+      while(SelPress) delay(100); // to avoid miss click due to heavy fingers
     }
+
+    handleSerialCommands();
+    #ifdef HAS_KEYBOARD
+        checkShortcutPress();  // shortctus to quickly start apps without navigating the menus
+    #endif
+
     if(!submenu) {
-      String txt=options[index].label.c_str();
+      String txt=options[index].label;
       displayScrollingText(txt, coord);
     }
 
@@ -451,6 +462,7 @@ int loopOptions(std::vector<Option>& options, bool bright, bool submenu, const c
       break;
     }
     else {
+      checkReboot();
       if(index==0) index = options.size() - 1;
       else if(index>0) index--;
       redraw = true;
@@ -467,7 +479,7 @@ int loopOptions(std::vector<Option>& options, bool bright, bool submenu, const c
 
     /* Select and run function */
     if(check(SelPress)) {
-      Serial.println("Selected: " + String(options[index].label.c_str()));
+      Serial.println("Selected: " + String(options[index].label));
       options[index].operation();
       break;
     }
@@ -500,10 +512,10 @@ int loopOptions(std::vector<Option>& options, bool bright, bool submenu, const c
 ** Dependencia: prog_handler =>>    0 - Flash, 1 - LittleFS
 ***************************************************************************************/
 void progressHandler(int progress, size_t total, String message) {
-  int barWidth = map(progress, 0, total, 0, 200);
+  int barWidth = map(progress, 0, total, 0, tftWidth-40);
   if(barWidth <3) {
     tft.fillRect(6, 27, tftWidth-12, tftHeight-33, bruceConfig.bgColor);
-    tft.drawRect(18, tftHeight - 47, 204, 17, bruceConfig.priColor);
+    tft.drawRect(18, tftHeight - 47, tftWidth-36, 17, bruceConfig.priColor);
     displayRedStripe(message, TFT_WHITE, bruceConfig.priColor);
   }
   tft.fillRect(20, tftHeight - 45, barWidth, 13, bruceConfig.priColor);
@@ -513,14 +525,28 @@ void progressHandler(int progress, size_t total, String message) {
 ** Function name: drawOptions
 ** Description:   Função para desenhar e mostrar as opçoes de contexto
 ***************************************************************************************/
-Opt_Coord drawOptions(int index,std::vector<Option>& options, uint16_t fgcolor, uint16_t bgcolor) {
+Opt_Coord drawOptions(int index,std::vector<Option>& options, uint16_t fgcolor, uint16_t bgcolor, bool firstRender) {
     Opt_Coord coord;
     int menuSize = options.size();
     if(options.size()>MAX_MENU_SIZE) {
       menuSize = MAX_MENU_SIZE;
-      }
+    }
 
-    if(index==0) tft.fillRoundRect(tftWidth*0.10,tftHeight/2-menuSize*(FM*8+4)/2 -5,tftWidth*0.8,(FM*8+4)*menuSize+10,5,bgcolor);
+    // Uncomment to update the statusBar (causes flickering)
+    //drawStatusBar();
+
+    int32_t optionsTopY = tftHeight/2-menuSize*(FM*8+4)/2 -5;
+
+    if(firstRender) {
+      tft.fillRoundRect(tftWidth*0.10,optionsTopY,tftWidth*0.8,(FM*8+4)*menuSize+10,5,bgcolor);
+    }
+    // Uncomment to update the statusBar (causes flickering)
+    // else if(optionsTopY < 25) {
+    //     int32_t occupiedStatusBarHeight = 25 - optionsTopY;
+    //     tft.fillRoundRect(
+    //         tftWidth * 0.10, optionsTopY, tftWidth * 0.8, occupiedStatusBarHeight + 5, 5, bgcolor
+    //     );
+    // }
 
     tft.setTextColor(fgcolor,bgcolor);
     tft.setTextSize(FM);
@@ -529,7 +555,6 @@ Opt_Coord drawOptions(int index,std::vector<Option>& options, uint16_t fgcolor, 
     int i=0;
     int init = 0;
     int cont = 1;
-    if(index==0) tft.fillRoundRect(tftWidth*0.10,tftHeight/2-menuSize*(FM*8+4)/2 -5,tftWidth*0.8,(FM*8+4)*menuSize+10,5,bgcolor);
     menuSize = options.size();
     if(index>=MAX_MENU_SIZE) init=index-MAX_MENU_SIZE+1;
     for(i=0;i<menuSize;i++) {
@@ -547,7 +572,7 @@ Opt_Coord drawOptions(int index,std::vector<Option>& options, uint16_t fgcolor, 
           coord.bgcolor=bgcolor;
         }
         else text +=" ";
-        text += String(options[i].label.c_str()) + "              ";
+        text += String(options[i].label) + "              ";
         tft.setCursor(tftWidth*0.10+5,tft.getCursorY()+4);
         tft.println(text.substring(0,(tftWidth*0.8 - 10)/(LW*FM) - 1));
         cont++;
@@ -564,10 +589,11 @@ Opt_Coord drawOptions(int index,std::vector<Option>& options, uint16_t fgcolor, 
 }
 
 /***************************************************************************************
-** Function name: drawOptions
+** Function name: drawSubmenu
 ** Description:   Função para desenhar e mostrar as opçoes de contexto
 ***************************************************************************************/
 void drawSubmenu(int index, std::vector<Option>& options, const char *title) {
+    drawStatusBar();
     int menuSize = options.size();
     tft.setTextColor(bruceConfig.priColor,bruceConfig.bgColor);
     tft.setTextSize(FP);
@@ -589,7 +615,7 @@ void drawSubmenu(int index, std::vector<Option>& options, const char *title) {
     tft.setTextColor(bruceConfig.priColor);
     tft.fillRect(12, 67+(tftHeight-134)/2+((FG-1)%2)*LH/2, tftWidth-24, 8 * FG + 1, bruceConfig.bgColor);
     tft.drawCentreString(
-      options[index].label.c_str(),
+      options[index].label,
       tftWidth/2,
       67+(tftHeight-134)/2+((selectedTextSize-1)%2)*LH/2,
       SMOOTH_FONT
@@ -604,9 +630,9 @@ void drawSubmenu(int index, std::vector<Option>& options, const char *title) {
     tft.drawCentreString(thirdOption,tftWidth/2, 102+(tftHeight-134)/2,SMOOTH_FONT);
 
     tft.drawFastHLine(
-      tftWidth/2 - options[index].label.size()*selectedTextSize*LW/2,
+      tftWidth/2 - strlen(options[index].label.c_str())*selectedTextSize*LW/2,
       67+(tftHeight-134)/2+((selectedTextSize-1)%2)*LH/2+selectedTextSize*LH,
-      options[index].label.size()*selectedTextSize*LW,
+      strlen(options[index].label.c_str())*selectedTextSize*LW,
       bruceConfig.priColor
     );
     tft.fillRect(tftWidth-5,0,5,tftHeight,bruceConfig.bgColor);
@@ -730,16 +756,20 @@ int getBattery() {
 ** Description:   Delivers the battery value from 1-100
 ***************************************************************************************/
 void drawBatteryStatus(uint8_t bat) {
-    if(bat==0) return;
-    tft.drawRoundRect(tftWidth - 42, 7, 34, 17, 2, bruceConfig.priColor);
-    tft.setTextSize(FP);
-    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-    tft.drawRightString((bat==100 ? "" : " ")  + String(bat) + "%", tftWidth - 45, 12, 1);
-    tft.fillRoundRect(tftWidth - 40, 9, 30 * bat / 100, 13, 2, bruceConfig.priColor);
-    tft.drawLine(tftWidth - 30, 9, tftWidth - 30, 9 + 13, bruceConfig.bgColor);
-    tft.drawLine(tftWidth - 20, 9, tftWidth - 20, 9 + 13, bruceConfig.bgColor);
-}
+  if (bat == 0) return;
 
+  bool charging = isCharging();
+
+  uint16_t color = charging ? TFT_GREEN : bruceConfig.priColor;
+
+  tft.drawRoundRect(tftWidth - 42, 7, 34, 17, 2, color);
+  tft.setTextSize(FP);
+  tft.setTextColor(color, bruceConfig.bgColor);
+  tft.drawRightString((bat == 100 ? "" : " ") + String(bat) + "%", tftWidth - 45, 12, 1);
+  tft.fillRoundRect(tftWidth - 40, 9, 30 * bat / 100, 13, 2, color);
+  tft.drawLine(tftWidth - 30, 9, tftWidth - 30, 9 + 13, bruceConfig.bgColor);
+  tft.drawLine(tftWidth - 20, 9, tftWidth - 20, 9 + 13, bruceConfig.bgColor);
+}
 /***************************************************************************************
 ** Function name: drawWireguardStatus()
 ** Description:   Draws a padlock when connected

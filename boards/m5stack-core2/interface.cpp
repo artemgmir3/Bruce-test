@@ -1,7 +1,6 @@
 #include "interface.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
-
 #include <M5Unified.h>
 
 /***************************************************************************************
@@ -10,6 +9,8 @@
 ** Description:   initial setup for the device
 ***************************************************************************************/
 void _setup_gpio() {
+    _rtc.setWire(&Wire); // Cplus uses Wire1 default, the lib had been changed to accept setting I2C bus
+                         // StickCPlus uses BM8563 that is the same as PCF8536
     M5.begin(); //Need to test if SDCard inits with the new setup
 }
 
@@ -87,7 +88,8 @@ void InputHandler(void) {
 ** location: mykeyboard.cpp
 ** Turns off the device (or try to)
 **********************************************************************/
-void powerOff() { }
+void powerOff() { M5.Power.powerOff(); }
+void goToDeepSleep() { M5.Power.deepSleep(); }
 
 
 /*********************************************************************
@@ -96,3 +98,13 @@ void powerOff() { }
 ** Btn logic to tornoff the device (name is odd btw)
 **********************************************************************/
 void checkReboot() { }
+
+/***************************************************************************************
+** Function name: isCharging()
+** Description:   Determines if the device is charging
+***************************************************************************************/
+bool isCharging() {
+    if(M5.Power.getBatteryCurrent()>0 || M5.Power.getBatteryCurrent())
+        return true;
+    else return false;
+}
